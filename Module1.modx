@@ -1,0 +1,290 @@
+MODULE Module1
+    CONST robtarget pVorBox:=[[1303.194933005,2202.193785678,58.095010549],[0.699333816,-0.021793921,-0.004181316,0.714450667],[1,1,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pBox:=[[1303.199215404,2381.568070631,58.100022179],[0.699326906,-0.021797954,-0.004177969,0.714457327],[1,1,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pHold:=[[393.566479658,1129.85841629,29.874559683],[0.866979893,0.089185304,0.289096791,-0.395998601],[-1,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pDropBox:=[[16.506526246,2356.356155169,62.666838493],[0.000174814,0.006404859,0.014176851,-0.999878975],[-2,1,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST jointtarget pHome:=[[69.696964668,-3.030299443,64.124575325,179.999991349,57.575762628,-89.999995674],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    VAR bool isCorrect := FALSE;
+    VAR bool cogPlaced := FALSE;
+    VAR bool nutPlaced := FALSE;
+    VAR bool screwPlaced := FALSE;
+    VAR bool washerPlaced := FALSE;
+    !***********************************************************
+    !
+    ! Module:  Module1
+    !
+    ! Description:
+    !   <Insert description here>
+    !
+    ! Author: Sara
+    !
+    ! Version: 1.0
+    !
+    !***********************************************************
+    PROC main()
+        
+        !reset station for proper simulation
+        PulseDO \PLength:=0.5, DO_releaseBox;
+        PulseDO \PLength:=0.5, DO_reset;
+        PulseDO \PLength:=0.5, DO_resetCog;
+        PulseDO \PLength:=0.5, DO_resetNut;
+        PulseDO \PLength:=0.5, DO_resetScrew;
+        PulseDO \PLength:=0.5, DO_resetWasher;
+        WaitTime 1;
+        
+        !wait screen + move robot to box and hold
+        SetDO DO_waitScreen, 1;
+        grabBox;
+        
+        !screen off for instructions
+        SetDO DO_waitScreen, 0;
+        
+        !assembly steps + correct move check + bool reset
+        isCorrect:=FALSE;
+        cogPlaced := FALSE;
+        nutPlaced := FALSE;
+        screwPlaced := FALSE;
+        washerPlaced := FALSE;
+        
+        assembleNut;
+        
+        isCorrect:=FALSE;
+        
+        assembleScrew;
+        
+        isCorrect:=FALSE;
+        
+        assembleWasher;
+        
+        isCorrect:=FALSE;
+        
+        assembleCog;
+        
+        
+        !attach parts to box for moving
+        PulseDO \PLength:=0.5, DO_grabParts;
+        WaitTime 0.5;
+        
+        !move box to end and detach + reset station for next iteration
+        SetDO DO_waitScreen, 1;
+        boxToExit;
+    ENDPROC
+    
+    PROC grabBox()
+        !move from home to grab box
+        MoveAbsJ pHome,v500,fine,tFork\WObj:=wobj_station;
+        MoveL pVorBox,v500,z100,tFork\WObj:=wobj_station;
+        MoveL pBox,v500,fine,tFork\WObj:=wobj_station;
+        
+        !attach box
+        PulseDO \PLength:=0.5, DO_grabBox;
+        WaitTime 1;
+        
+        !move to hold position
+        MoveL Offs(pBox, 0, 0, 200),v500,z100,tFork\WObj:=wobj_station;
+        MoveJ pHold,v500,fine,tFork\WObj:=wobj_station;
+    ENDPROC
+    
+    PROC boxToExit()
+        !move box and parts to exit position
+        MoveL Offs(pDropBox, 0, 0, 100),v500,z100,tFork\WObj:=wobj_station;
+        MoveL pDropBox,v500,fine,tFork\WObj:=wobj_station;
+        
+        !detach box and parts
+        PulseDO \PLength:=0.5, DO_releaseBox;
+        WaitTime 1;
+        
+        !move back to home position
+        MoveL Offs(pDropBox, 400, 0, 0),v500,z100,tFork\WObj:=wobj_station;
+        MoveAbsJ pHome,v500,fine,tFork\WObj:=wobj_station;
+        !reset position of box and parts
+        PulseDO \PLength:=0.5, DO_reset;
+        WaitTime 1;
+        
+    ENDPROC
+    
+    PROC assembleCog()
+        
+        WHILE NOT isCorrect DO
+            !change screen to instruction (plus ensure signal works and screen actually shows)
+            SetDO DO_taskCog, 0;
+            WaitTime 0.1;
+            SetDO DO_taskCog, 1;
+            SetDO DO_lightCog, 1;
+            
+            WaitUntil ((DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) OR (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) OR (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp1)=1 AND nutPlaced=FALSE) OR (DInput(DI_comp2)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp3)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE));            
+            !error: wrong part (only one error here because wrong compartment not possible with box layout and comp/part sizes)
+            IF ((DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) OR (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) OR (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE)) THEN
+                SetDO DO_taskCog, 0;
+                SetDO DO_err_boxCog, 1;
+                
+                IF (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetNut;
+                IF (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetScrew;
+                IF (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetWasher;
+                
+                WaitTime 2;
+                
+                WaitUntil ((DInput(DI_sensorNut)=0 OR nutPlaced=TRUE) AND (DInput(DI_sensorScrew)=0 OR screwPlaced=TRUE) AND (DInput(DI_sensorWasher)=0 OR washerPlaced=TRUE));
+                SetDO DO_err_boxCog, 0;
+
+            !correct
+            ELSEIF DInput(DI_comp4)=1 THEN
+                isCorrect := TRUE;
+                cogPlaced := TRUE; 
+                
+                SetDO DO_taskCog, 0;
+                SetDO DO_lightCog, 0;
+                SetDO DO_taskComplete, 1;
+                WaitTime 1;
+                SetDO DO_taskComplete, 0;
+            ENDIF
+        ENDWHILE
+    ENDPROC
+    
+    PROC assembleNut()
+        
+        WHILE NOT isCorrect DO
+            !change screen to instruction
+            SetDO DO_taskNut, 0;
+            WaitTime 0.1;
+            SetDO DO_taskNut, 1;
+            SetDO DO_lightNut, 1;
+            
+            !wait for any user input and determine if correct or error
+            WaitUntil ((DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) OR (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) OR (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp1)=1 AND nutPlaced=FALSE) OR (DInput(DI_comp2)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp3)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE));            
+            !error: wrong part
+            IF ((DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) OR (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) OR (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE)) THEN
+                SetDO DO_taskNut, 0;
+                SetDO DO_err_boxNut, 1; 
+                
+                IF (DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetCog;
+                IF (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetScrew;
+                IF (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetWasher;
+                
+                WaitTime 2;
+                
+                WaitUntil (DInput(DI_sensorCog)=0 OR cogPlaced) AND (DInput(DI_sensorScrew)=0 OR screwPlaced) AND (DInput(DI_sensorWasher)=0 OR washerPlaced);
+                SetDO DO_err_boxNut, 0;
+                SetDO DO_taskNut, 1;
+
+            !error: wrong compartment
+            ELSEIF ((DInput(DI_comp2)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp3)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE)) THEN
+                SetDO DO_taskNut, 0;
+                SetDO DO_err_placeNut, 1; 
+                WaitTime 2;
+                PulseDO \PLength:=0.5, DO_resetNut;
+                
+                WaitUntil ((DInput(DI_comp1)=0 OR nutPlaced=TRUE) AND (DInput(DI_comp2)=0 OR screwPlaced=TRUE) AND (DInput(DI_comp3)=0 OR washerPlaced=TRUE) AND (DInput(DI_comp4)=0 OR cogPlaced=TRUE));
+                SetDO DO_err_placeNut, 0;
+
+            !correct
+            ELSEIF DInput(DI_comp1)=1 THEN
+                isCorrect := TRUE;
+                nutPlaced := TRUE;
+                
+                SetDO DO_taskNut, 0;
+                SetDO DO_lightNut, 0;
+                SetDO DO_taskComplete, 1;
+                WaitTime 1;
+                SetDO DO_taskComplete, 0;
+            ENDIF
+        ENDWHILE
+    ENDPROC
+    
+    PROC assembleScrew()
+        
+        WHILE NOT isCorrect DO
+            !change screen to instruction
+            SetDO DO_taskScrew, 0;
+            WaitTime 0.1;
+            SetDO DO_taskScrew, 1;
+            SetDO DO_lightScrew, 1;
+            
+            WaitUntil ((DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) OR (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) OR (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp1)=1 AND nutPlaced=FALSE) OR (DInput(DI_comp2)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp3)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE));
+            
+            !error: wrong part
+            IF ((DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) OR (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) OR (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE)) THEN
+                SetDO DO_taskScrew, 0;
+                SetDO DO_err_boxScrew, 1;
+                
+                IF (DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetCog;
+                IF (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetNut;
+                IF (DInput(DI_sensorWasher)=1 AND washerPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetWasher;
+                
+                WaitTime 2;
+                
+                WaitUntil ((DInput(DI_sensorCog)=0 OR cogPlaced=TRUE) AND (DInput(DI_sensorNut)=0 OR nutPlaced=TRUE) AND (DInput(DI_sensorWasher)=0 OR washerPlaced=TRUE));
+                SetDO DO_err_boxScrew, 0;
+
+            !error: wrong comp
+            ELSEIF ((DInput(DI_comp1)=1 AND nutPlaced=FALSE) OR (DInput(DI_comp3)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE)) THEN
+                SetDO DO_taskScrew, 0;
+                SetDO DO_err_placeScrew, 1; 
+                WaitTime 2;
+                PulseDO \PLength:=0.5, DO_resetScrew;
+                
+                WaitUntil ((DInput(DI_comp1)=0 OR nutPlaced=TRUE) AND (DInput(DI_comp2)=0 OR screwPlaced=TRUE) AND (DInput(DI_comp3)=0 OR washerPlaced=TRUE) AND (DInput(DI_comp4)=0 OR cogPlaced=TRUE));
+                SetDO DO_err_placeScrew, 0;
+
+            !correct
+            ELSEIF DInput(DI_comp2)=1 THEN
+                isCorrect := TRUE;
+                screwPlaced := TRUE; 
+                
+                SetDO DO_taskScrew, 0;
+                SetDO DO_lightScrew, 0;
+                SetDO DO_taskComplete, 1;
+                WaitTime 1;
+                SetDO DO_taskComplete, 0;
+            ENDIF 
+        ENDWHILE
+    ENDPROC
+    
+    PROC assembleWasher()
+        
+        WHILE NOT isCorrect DO
+            !change screen to instruction
+            SetDO DO_taskWasher, 0;
+            WaitTime 0.1;
+            SetDO DO_taskWasher, 1;
+            SetDO DO_lightWasher, 1;
+            
+            WaitUntil ((DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) OR (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) OR (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp1)=1 AND nutPlaced=FALSE) OR (DInput(DI_comp2)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp3)=1 AND washerPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE));            
+            !error: wrong part
+            IF ((DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) OR (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) OR (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE)) THEN
+                SetDO DO_taskWasher, 0;
+                SetDO DO_err_boxWasher, 1;
+                
+                IF (DInput(DI_sensorCog)=1 AND cogPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetCog;
+                IF (DInput(DI_sensorNut)=1 AND nutPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetNut;
+                IF (DInput(DI_sensorScrew)=1 AND screwPlaced=FALSE) PulseDO \PLength:=0.5, DO_resetScrew;
+                
+                WaitTime 2;
+                
+                WaitUntil ((DInput(DI_sensorCog)=0 OR cogPlaced=TRUE) AND (DInput(DI_sensorNut)=0 OR nutPlaced=TRUE) AND (DInput(DI_sensorScrew)=0 OR screwPlaced=TRUE));
+                SetDO DO_err_boxWasher, 0;
+
+            !error: wrong comp
+            ELSEIF ((DInput(DI_comp1)=1 AND nutPlaced=FALSE) OR (DInput(DI_comp2)=1 AND screwPlaced=FALSE) OR (DInput(DI_comp4)=1 AND cogPlaced=FALSE)) THEN
+                SetDO DO_taskWasher, 0;
+                SetDO DO_err_placeWasher, 1; 
+                WaitTime 2;
+                PulseDO \PLength:=0.5, DO_resetWasher;
+                
+                WaitUntil ((DInput(DI_comp1)=0 OR nutPlaced=TRUE) AND (DInput(DI_comp2)=0 OR screwPlaced=TRUE) AND (DInput(DI_comp3)=0 OR washerPlaced=TRUE) AND (DInput(DI_comp4)=0 OR cogPlaced=TRUE));
+                SetDO DO_err_placeWasher, 0;
+
+            !correct
+            ELSEIF DInput(DI_comp3)=1 THEN
+                isCorrect := TRUE;
+                washerPlaced := TRUE; 
+                
+                SetDO DO_taskWasher, 0;
+                SetDO DO_lightWasher, 0;
+                SetDO DO_taskComplete, 1;
+                WaitTime 1;
+                SetDO DO_taskComplete, 0;
+            ENDIF
+        ENDWHILE
+    ENDPROC
+ENDMODULE
