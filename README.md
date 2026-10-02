@@ -1,7 +1,5 @@
 # Kitting-Station für inklusive Arbeitsplätze
 
-RobotStudio-Station zur Bachelorarbeit "[Titel deiner Arbeit]".
-
 ## Inhalt
 - `assets/` – SolidWorks-Dateien und STL-Modelle
 - `images/` – Bilder für das kognitiv assistierende Display
